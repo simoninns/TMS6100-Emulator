@@ -5,56 +5,28 @@
     <ProjectVersion>7.0</ProjectVersion>
     <ToolchainName>com.Atmel.AVRGCC8.C</ToolchainName>
     <ProjectGuid>dce6c7e3-ee26-4d79-826b-08594b9ad897</ProjectGuid>
-    <avrdevice>ATmega32U4</avrdevice>
+    <avrdevice>ATmega32U2</avrdevice>
     <avrdeviceseries>none</avrdeviceseries>
     <OutputType>Executable</OutputType>
     <Language>C</Language>
     <OutputFileName>$(MSBuildProjectName)</OutputFileName>
     <OutputFileExtension>.elf</OutputFileExtension>
     <OutputDirectory>$(MSBuildProjectDirectory)\$(Configuration)</OutputDirectory>
-    <AssemblyName>AcornPHROM</AssemblyName>
-    <Name>TMS6100-Emulator</Name>
-    <RootNamespace>AcornPHROM</RootNamespace>
+    <AssemblyName>tms6100</AssemblyName>
+    <Name>tms6100</Name>
+    <RootNamespace>tms6100</RootNamespace>
     <ToolchainFlavour>Native</ToolchainFlavour>
     <KeepTimersRunning>true</KeepTimersRunning>
     <OverrideVtor>false</OverrideVtor>
     <CacheFlash>true</CacheFlash>
     <ProgFlashFromRam>true</ProgFlashFromRam>
-    <RamSnippetAddress>0x20000000</RamSnippetAddress>
+    <RamSnippetAddress />
     <UncachedRange />
     <preserveEEPROM>true</preserveEEPROM>
-    <OverrideVtorValue>exception_table</OverrideVtorValue>
+    <OverrideVtorValue />
     <BootSegment>2</BootSegment>
     <eraseonlaunchrule>0</eraseonlaunchrule>
-    <avrtool>
-    </avrtool>
-    <avrtoolserialnumber>00A200018498</avrtoolserialnumber>
-    <avrdeviceexpectedsignature>0x1E958A</avrdeviceexpectedsignature>
-    <avrtoolinterface>
-    </avrtoolinterface>
-    <avrtoolinterfaceclock>125000</avrtoolinterfaceclock>
-    <com_atmel_avrdbg_tool_ispmk2>
-      <ToolOptions>
-        <InterfaceProperties>
-          <IspClock>125000</IspClock>
-        </InterfaceProperties>
-        <InterfaceName>ISP</InterfaceName>
-      </ToolOptions>
-      <ToolType>com.atmel.avrdbg.tool.ispmk2</ToolType>
-      <ToolNumber>000200058283</ToolNumber>
-      <ToolName>AVRISP mkII</ToolName>
-    </com_atmel_avrdbg_tool_ispmk2>
-    <com_atmel_avrdbg_tool_avrdragon>
-      <ToolOptions>
-        <InterfaceProperties>
-          <IspClock>125000</IspClock>
-        </InterfaceProperties>
-        <InterfaceName>ISP</InterfaceName>
-      </ToolOptions>
-      <ToolType>com.atmel.avrdbg.tool.avrdragon</ToolType>
-      <ToolNumber>00A200018498</ToolNumber>
-      <ToolName>AVR Dragon</ToolName>
-    </com_atmel_avrdbg_tool_avrdragon>
+    <avrtool />
     <AsfFrameworkConfig>
       <framework-data xmlns="">
   <options />
@@ -71,7 +43,7 @@
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <ToolchainSettings>
       <AvrGcc>
-  <avrgcc.common.Device>-mmcu=atmega32u4 -B "%24(PackRepoDir)\Atmel\ATmega_DFP\1.0.106\gcc\dev\atmega32u4"</avrgcc.common.Device>
+  <avrgcc.common.Device>-mmcu=atmega32u2 -B "%24(PackRepoDir)\Atmel\ATmega_DFP\1.0.106\gcc\dev\atmega32u2"</avrgcc.common.Device>
   <avrgcc.common.outputfiles.hex>True</avrgcc.common.outputfiles.hex>
   <avrgcc.common.outputfiles.lss>True</avrgcc.common.outputfiles.lss>
   <avrgcc.common.outputfiles.eep>True</avrgcc.common.outputfiles.eep>
@@ -109,7 +81,7 @@
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <ToolchainSettings>
       <AvrGcc>
-  <avrgcc.common.Device>-mmcu=atmega32u4 -B "%24(PackRepoDir)\Atmel\ATmega_DFP\1.0.106\gcc\dev\atmega32u4"</avrgcc.common.Device>
+  <avrgcc.common.Device>-mmcu=atmega32u2 -B "%24(PackRepoDir)\Atmel\ATmega_DFP\1.0.106\gcc\dev\atmega32u2"</avrgcc.common.Device>
   <avrgcc.common.outputfiles.hex>True</avrgcc.common.outputfiles.hex>
   <avrgcc.common.outputfiles.lss>True</avrgcc.common.outputfiles.lss>
   <avrgcc.common.outputfiles.eep>True</avrgcc.common.outputfiles.eep>
@@ -147,10 +119,13 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="hardwaremap.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="main.c">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="tms6100romdata.h">
+    <Compile Include="romdata.h">
       <SubType>compile</SubType>
     </Compile>
   </ItemGroup>
