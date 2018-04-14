@@ -1018,7 +1018,7 @@
   (gr_text "TMS6100\nEmulator" (at 156.2735 136.525) (layer F.SilkS)
     (effects (font (size 1.5 1.5) (thickness 0.3)))
   )
-  (gr_text "(C) Simon Inns, Daniel Jameson 2018" (at 159.9565 121.9835 90) (layer B.SilkS)
+  (gr_text "(c) 2018 Simon Inns, Daniel Jameson" (at 159.9565 121.9835 90) (layer B.SilkS)
     (effects (font (size 1.016 1.016) (thickness 0.254)) (justify mirror))
   )
 
