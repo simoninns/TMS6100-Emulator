@@ -38,6 +38,8 @@
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
+#include <avr/power.h>
+#include <avr/wdt.h>
 
 // Include the PHROM data image
 #include "romdata.h"
@@ -236,6 +238,13 @@ int main(void)
 {
 	// Initialise the hardware
 	initialiseHardware();
+	
+	// Disable the watchdog timer (if set in fuses)
+	MCUSR &= ~(1 << WDRF);
+	wdt_disable();
+
+	// Disable the clock divider (if set in fuses)
+	clock_prescale_set(clock_div_1);
 	
 	// We need to interrupt on the M0 and M1 pins
 	// using INT (external interrupts) which can be
