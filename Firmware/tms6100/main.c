@@ -41,8 +41,24 @@
 #include <avr/power.h>
 #include <avr/wdt.h>
 
-// Include the PHROM data image
-#include "romdata.h"
+// Include the required PHROM data image.  Available options are:
+//
+// PHROM_ACORN - The Acorn Speech System PHROM data
+// PHROM_US - The TI American speech PHROM data
+//
+#ifdef PHROM_ACORN
+	// Acorn PHROM data
+	#pragma message ("Using Acorn Speech System PHROM data")
+	#include "romdata_acorn.h"
+#elif PHROM_US
+	// TI US PHROM data
+	#pragma message ("Using American TI Speech System PHROM data")
+	#include "romdata_us.h"
+#else
+	// No PHROM was defined (or an unknown PHROM)
+	#pragma message ("Using Acorn Speech System PHROM data (default)")
+	#include "romdata_acorn.h"
+#endif
 
 // Include the hardware mapping
 #include "hardwaremap.h"

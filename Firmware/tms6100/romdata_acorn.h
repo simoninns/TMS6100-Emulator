@@ -1,5 +1,5 @@
 /************************************************************************
-	tms6100romdata.h
+	romdata_acorn.h
 
     Acorn TMS6100 PHROMA image
     Copyright (C) 2018 Simon Inns
@@ -22,13 +22,187 @@
 
     Email: simon.inns@gmail.com
 
-    ************************************************************************/
+************************************************************************/
 
-#ifndef ROMDATA_H_
-#define ROMDATA_H_
+#ifndef ROMDATA_ACORN_H_
+#define ROMDATA_ACORN_H_
 
 // Note: This is a dump of the Acorn Speech PHROMA produced using HxD
 // and contains 16K bytes of data (16,384 bytes or 0x4000 in hex).
+
+/*
+	PHROM Word list:
+	
+	Word or   Absolute
+	word-part address
+	number    (hex)    Word
+
+	127        250     -0.125
+	128        25F     -0.25
+	129        272     (TONE 1)
+	130        2B0     (TONE2)
+	131        2E9     -D
+	132        300     -ED
+	133        32B     -ING
+	134        361     -S
+	135        384     -TEE
+	136        3DC     -TH
+	137        3F3     -T
+	138        415     -
+	139        437     ZERO (0)
+	140        4C8     HUNDRED (00)
+	141        530     THOUSAND (000)
+	142        5CA     ONE,WON
+	143        633     TWO,TO,TOO
+	144        692     2- (TWEN-)
+	145        6D2     THREE
+	146        73F     3- (THIR-)
+	147        788     FOUR,FOR,FORE
+	148        7F7     4- (FOR-)
+	149        840     FIVE
+	150        8B6     5- (FIF-)
+	151        8E9     SIX
+	152        936     6- (SIX-)
+	153        96E     SEVEN
+	154        9CB     7- (SEVEN-)
+	155        A12     EIGHT,ATE
+	156        A46     8- (EIGHT-)
+	157        A71     NINE
+	158        AFD     9- (NIN-)
+	159        B5D     A
+	160        BB6     ACORN
+	161        C4B     AFTER
+	162        CB3     AGAIN
+	163        D46     AMOUNT
+	164        DBD     AN
+	165        E12     AND
+	166        E8E     ANOTHER
+	167        EFD     ANSWER
+	168        F72     ANY
+	169        FCF     AVAILABLE
+	170        065     B,BEE,BE
+	171        10BD    BAD
+	172        13B     BETWEEN
+	173        1B1     BOTH
+	174        1F8     BUTTON
+	175        124D    C,SEE,SEA
+	176        12B1    CASSETTE
+	177        1326    CHARACTER
+	178        139F    COMPLETE
+	179        140B    COMPUTER
+	180        1483    CORRECT
+	181        14F0    D
+	182        153B    DATA
+	183        159F    DATE
+	184        15E6    DO
+	185        162A    DOLLAR
+	186        167E    DONT
+	187        16D7    DOWN
+	188        175A    E
+	189        178B    EACH
+	190        17D6    ELEVEN
+	191        1852    ENGAGED
+	192        18FA    ENTER
+	193        195C    ERROR
+	194        19AA    ESCAPE
+	195        1A1C    F
+	196        1A5D    FEW
+	197        1AAB    FILE
+	198        1B1E    FIRST
+	199        1896    FOUND
+	200        1C11    FROM
+	201        1C6B    G
+	202        1CC9    GOOD
+	203        1D09    H
+	204        1D60    HAVE
+	205        1DCC    I,EYE
+	206        1E3E    ILLEGAL
+	207        1EBD    IN-
+	208        1EFC    INPUT
+	209        1F57    IS
+	210        1FA6    J,JAY
+	211        2008    K
+	212        2061    KEY
+	213        209F    L
+	214        20FC    LARGE
+	215        2195    LAST
+	216        21F5    LINE
+	217        226F    M
+	218        22CD    MANY
+	219        2321    MINUS
+	220        239D    MORE
+	221        2409    MUST
+	222        246F    N
+	223        24C9    NAME
+	224        2544    NEGATIVE
+	225        25DE    NEW
+	226        263D    NO,KNOW
+	227        269D    NOT,KNOT
+	228        26F7    NOW
+	229        276A    NUMBER
+	230        27E5    0
+	231        282D    O'CLOCK
+	232        2892    OF
+	233        28D9    OFF
+	234        2923    OLD
+	235        2980    ON
+	236        29DE    ONLY
+	237        2A48    OR
+	238        2A90    P,PEA
+	239        2AC7    PARAMETER
+	240        2B58    PENCE
+	241        2BBA    PLEASE
+	242        2C45    PLUS
+	243        2C8B    POINT
+	244        2CE6    POSITIVE
+	245        2D64    POUN-
+	246        2DCD    PRESS
+	247        2E3F    PROGRAM
+	248        2EC8    Q,QUEUE
+	249        2F1E    R,ARE
+	250        2F59    RED
+	251        2FD1    RESET
+	252        3051    RETURN
+	253        30E7    RUN
+	254        3153    RUNNING
+	255        31E1    S
+	256        3231    SAME
+	257        329A    SCORE
+	258        3320    SECOND
+	259        339A    SMALL
+	260        341F    START
+	261        349F    STOP
+	262        34FB    SWITCH
+	263        3573    T,TEA,TEE
+	264        35CA    TEN
+	265        362B    THANK
+	266        3684    THAT
+	267        36DF    THE
+	268        3724    THEN
+	269        377E    THIRD
+	270        3808    THIS
+	271        3874    TIME
+	272        3800    TRY
+	273        3953    TWELVE
+	274        39D2    TYPE
+	275        3A21    U,YOU
+	276        3A91    UH
+	277        3AC0    UP
+	278        3AF7    V
+	279        3B5C    VERY
+	280        3BB8    W
+	281        3C1D    WANT
+	282        3C6C    WAS
+	283        3CC2    WERE
+	284        3D1A    WHAT
+	285        3D6E    WHICH
+	286        3DB5    X
+	287        3E11    Y,WHY
+	288        3E86    YEAR
+	289        3EFC    YES
+	290        3F3D    YOUR
+	291        3F9B    Z
+*/
 
 const unsigned char phromData[16384] PROGMEM = {
 	0x00, 0xFF, 0x14, 0xC2, 0x94, 0x8C, 0x9C, 0x1C, 0x4C, 0x04, 0x82, 0xC6,
@@ -1399,4 +1573,4 @@ const unsigned char phromData[16384] PROGMEM = {
 	0xCE, 0xAE, 0x4E, 0xFE
 };
 
-#endif /* ROMDATA_H_ */
+#endif /* ROMDATA_ACORN_H_ */

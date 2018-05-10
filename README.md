@@ -1,4 +1,4 @@
-## Synopsis
+﻿## Synopsis
 
 TMS6100 speech PHROM (PHrase Read Only Memory) hardware emulator for use with the TMS5220 Voice Synthesis Processor in an Acorn BBC Microcomputer
 
@@ -11,6 +11,8 @@ This project creates a TMS6100 speech PHROM (PHrase Read Only Memory) for use wi
 Note: This is an Atmel Studio 7 project that can be loaded and compiled by the IDE
 
 Please see http://www.waitingforfriday.com/?p=30 for detailed documentation about TMS6100-Emulator
+
+The PHROM data for both the Acorn Speech System PHROM and the American TI PHROM is included in the source-code.  By default it will compile using the Acorn Speech Data.  Specifying the compiler macro PHROM_ACORN selects the Acorn PHROM and PHROM_US selects the American PHROM.  Note that the American PHROM is not generally for use with the BBC Micro and is included for experimental use (or use in other microcomputer systems).
 
 ## Author
 
