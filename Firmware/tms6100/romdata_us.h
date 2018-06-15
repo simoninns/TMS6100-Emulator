@@ -27,6 +27,13 @@
 #ifndef ROMDATA_US_H_
 #define ROMDATA_US_H_
 
+// Define the PHROM number 0-15 (defines the 16K address space that the PHROM
+// should respond to.
+//
+// Note: On the BBC Micro the SOUND command uses -16 (0xFFF0) for the US PHROM,
+// meaning the PHROM BANK number is 0
+#define PHROM_BANK 0x0
+
 // Note: This is a dump of the TI American Speech PHROM produced using HxD
 // and contains 16K bytes of data (16,384 bytes or 0x4000 in hex).
 

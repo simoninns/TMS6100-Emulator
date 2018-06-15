@@ -27,6 +27,13 @@
 #ifndef ROMDATA_ACORN_H_
 #define ROMDATA_ACORN_H_
 
+// Define the PHROM number 0x0-0xF (defines the 16K address space that the PHROM
+// should respond to
+//
+// Note: On the BBC Micro the SOUND command uses -1 (0xFFFF) for the Acorn PHROM,
+// meaning the PHROM BANK number is F
+#define PHROM_BANK 0xF
+
 // Note: This is a dump of the Acorn Speech PHROMA produced using HxD
 // and contains 16K bytes of data (16,384 bytes or 0x4000 in hex).
 

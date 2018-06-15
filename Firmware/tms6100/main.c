@@ -72,7 +72,7 @@
 // used within the interrupt handling routines.
 volatile struct tms6100State {
 	volatile uint32_t address;					// The current address the ROM is pointing to
-	volatile uint32_t chipSelectNumber;			// The chip identifier sent by the host
+	volatile uint32_t bankSelectNumber;			// The chip identifier sent by the host
 
 	volatile uint8_t loadAddressNibble;			// The position of the address nibble we are currently waiting for (0-4)
 	volatile uint8_t validAddressLoadedFlag;	// Flag indicating if there is a valid address loaded
@@ -117,18 +117,26 @@ void initialiseHardware(void)
 // SPI buffer interrupt - called when the SPI buffer is empty
 ISR(SPI_STC_vect)
 {
-	// Point to the next byte of the PHROM
+	uint32_t currentBank, localAddress;
+	
+	// Point to the next address in sequence
 	tms6100.address++;
 	
-	// Read the next byte to transfer from our current
-	// valid address and place it in the SPI transmit buffer
-	SPDR = pgm_read_byte(&(phromData[tms6100.address]));
+	// Is the current address within this PROM's bank?
+	currentBank = (tms6100.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+	localAddress = (tms6100.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
+	
+	// Only send data if the address is valid for this PHROM
+	if (currentBank == PHROM_BANK) SPDR = pgm_read_byte(&(phromData[localAddress]));
+	else SPDR = 0xFF; // Output should be high when not in use
 }
 
 // Function to handle external interrupt vector for the falling edge of M0
 // Note: The falling edge of M0 indicates a READ DATA command
 ISR(TMS6100_M0_INT_VECT)
 {
+	uint32_t currentBank, localAddress;
+	
 	// There are two possible types of READ DATA command:
 	// A 'dummy' read which indicates the TMS6100 should reset
 	// and a real read which indicates the TMS6100 should transfer a bit of data
@@ -139,14 +147,11 @@ ISR(TMS6100_M0_INT_VECT)
 	// is a dummy read.
 	
 	// Check for a 'dummy' read (indicating reset requested)
-	if (tms6100.validAddressLoadedFlag == FALSE)
-	{
+	if (tms6100.validAddressLoadedFlag == FALSE) {
 		// There is no valid loaded address... Reset the TMS6100 to a known state
 		tms6100.address = 0;
 		tms6100.loadAddressNibble = 0;
-	}
-	else
-	{
+	} else {
 		// We have a valid address so this is a 'real' READ DATA command
 		
 		// This is triggered because the host sends a single M0 pulse
@@ -167,7 +172,14 @@ ISR(TMS6100_M0_INT_VECT)
 		SPCR |= (1 << SPE) | (1 << DORD) | (1 << SPIE) | (1 << CPHA);
 			
 		// Fill the SPI buffer with the first byte
-		SPDR = pgm_read_byte(&(phromData[tms6100.address]));
+		
+		// Is the current address within this PROM's bank?
+		currentBank = (tms6100.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+		localAddress = (tms6100.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
+		
+		// Only send data if the address is valid for this PHROM
+		if (currentBank == PHROM_BANK) SPDR = pgm_read_byte(&(phromData[localAddress]));
+		else SPDR = 0xFF; // Output should be high when not in use
 	}
 }
 
@@ -217,24 +229,18 @@ ISR(TMS6100_M1_INT_VECT)
 	// Was the received nibble the 5th and final nibble of an address?
 	if (tms6100.loadAddressNibble > 4)
 	{
-		// 5th nibble of an address received - Address is now valid for use
+		// 5th nibble of an address received - Address is now valid
 		tms6100.validAddressLoadedFlag = TRUE;
 		tms6100.loadAddressNibble = 0;
 		
 		// We get 20 bits of address data from the host in 5 nibbles...
 		
-		// The datasheet says to ignore the two most significant bits:
-		tms6100.address &= 0x9FFFF; // Mask = 0b0011 1111 1111 1111 1111 = 0x9FFFF
+		// The format is - 2 bits (ignored) - 18 bits address
+		// Note: the 4 MS Bits are the bank select address
+		tms6100.bankSelectNumber = (tms6100.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
 		
-		// The number of the selected chip is the 4 most significant bits of the remaining bits:
-		// 0b11 1100 0000 0000 0000 = 0x3C000 >> 14
-		tms6100.chipSelectNumber = (tms6100.address & 0x3C000) >> 14; // Should be 'FF' for the Acorn PHROM
-		
-		// Note: An original TMS6100 would be mask programmed with it's own chip number.
-		// If you want to support multiple TMS6100 chips you could test it here.
-		
-		// Now we need to remove the chip select bits so we are left with only 14-bit address for this PHROM
-		tms6100.address &= 0x3FFF; // 0b11 1111 1111 1111 = 0x3FFF
+		// The address includes the chip select bank
+		tms6100.address = (tms6100.address & 0x3FFFF); // 0b 0011 1111 1111 1111 1111 = 0x3FFFF
 	}
 	else
 	{
