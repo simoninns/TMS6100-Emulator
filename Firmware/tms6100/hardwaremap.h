@@ -61,12 +61,22 @@
 #define TMS6100_M0_PIN		PIND
 #define TMS6100_M0_DDR		DDRD
 #define TMS6100_M0			(1 << 0)
+#define TMS6100_M0_INT		INT0
+#define TMS6100_M0_INT_VECT	INT0_vect
+#define TMS6100_M0_ISC0		ISC00
+#define TMS6100_M0_ISC1		ISC01
+#define TMS6100_M0_INTF		INTF0
 
 // M1 (PD1/INT1)
 #define TMS6100_M1_PORT		PORTD
 #define TMS6100_M1_PIN		PIND
 #define TMS6100_M1_DDR		DDRD
 #define TMS6100_M1			(1 << 1)
+#define TMS6100_M1_INT		INT1
+#define TMS6100_M1_INT_VECT	INT1_vect
+#define TMS6100_M1_ISC0		ISC10
+#define TMS6100_M1_ISC1		ISC11
+#define TMS6100_M1_INTF		INTF1
 
 // CLK (PB4) - Not currently used by the emulator as we use
 // the SPI module to asynchronously time data based on the 
