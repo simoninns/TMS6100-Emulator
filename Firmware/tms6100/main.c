@@ -67,7 +67,7 @@
 // Structure for holding the current state of the TMS6100
 // Note: All variables need to be 'volatile' as they are
 // used within the interrupt handling routines.
-volatile struct tms6100State {
+volatile struct stateStruct {
 	volatile uint32_t address;					// The current address the ROM is pointing to
 	volatile uint32_t bankSelectNumber;			// The chip identifier sent by the host
 
@@ -80,7 +80,7 @@ volatile struct tms6100State {
 	
 	volatile uint8_t add8InputFlag;				// Flag indicating that ADD8 is an input (or output if false)
 	volatile uint8_t bankActiveFlag;			// Flag indicating that this PHROM's bank is active
-} tms6100;
+} state;
 
 // Initialise the AVR hardware
 void initialiseHardware(void)
@@ -108,14 +108,14 @@ void initialiseHardware(void)
 	TMS6100_CLK_PORT &= ~TMS6100_CLK;
 	
 	// Initialise the TMS6100 emulation:
-	tms6100.address = 0;
-	tms6100.loadAddressNibble = 0;
-	tms6100.validAddressLoadedFlag = FALSE;
-	tms6100.readDataActive = FALSE;
-	tms6100.currentBit = 0;
-	tms6100.currentByte = 0;
-	tms6100.add8InputFlag = TRUE;
-	tms6100.bankActiveFlag = FALSE;
+	state.address = 0;
+	state.loadAddressNibble = 0;
+	state.validAddressLoadedFlag = FALSE;
+	state.readDataActive = FALSE;
+	state.currentBit = 0;
+	state.currentByte = 0;
+	state.add8InputFlag = TRUE;
+	state.bankActiveFlag = FALSE;
 	
 	// Initialise the SPI pins (no longer used in this firmware)
 	// (MISO configured by ADD8)
@@ -134,6 +134,23 @@ void initialiseHardware(void)
 	DEBUG2_PORT &= ~DEBUG2;
 }
 
+// SPI buffer interrupt - called when the SPI buffer is empty
+ISR(SPI_STC_vect)
+{
+	uint32_t currentBank, localAddress;
+	
+	// Point to the next address in sequence
+	state.address++;
+	
+	// Is the current address within this PROM's bank?
+	currentBank = (state.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+	localAddress = (state.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
+	
+	// Only send data if the address is valid for this PHROM
+	if (currentBank == PHROM_BANK) SPDR = pgm_read_byte(&(phromData[localAddress]));
+	else SPDR = 0xFF; // Output should be high when not in use
+}
+
 // Function to handle external interrupt vector for the falling edge of M0
 // Note: The falling edge of M0 indicates a READ DATA command
 void m0SignalHandler(void) // ISR(TMS6100_M0_INT_VECT)
@@ -141,59 +158,59 @@ void m0SignalHandler(void) // ISR(TMS6100_M0_INT_VECT)
 	uint32_t currentBank, localAddress;
 	
 	// Are we processing a read data?
-	if (tms6100.readDataActive == TRUE) {
+	if (state.readDataActive == TRUE) {
 		// If the current address is valid for this PHROM's bank
 		// set ADD8 as an output
-		if (tms6100.bankActiveFlag == TRUE) {
+		if (state.bankActiveFlag == TRUE) {
 			// This PHROM's bank is active, ensure ADD8 is an output
-			if (tms6100.add8InputFlag == TRUE) {
+			if (state.add8InputFlag == TRUE) {
 				TMS6100_ADD8_DDR |= TMS6100_ADD8;
-				tms6100.add8InputFlag = FALSE; // Output
+				state.add8InputFlag = FALSE; // Output
 			}
 			} else {
 			// This PHROM's bank is inactive, ensure ADD8 is an input
-			if (tms6100.add8InputFlag == FALSE) {
+			if (state.add8InputFlag == FALSE) {
 				TMS6100_ADD8_DDR &= ~TMS6100_ADD8;
 				TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
-				tms6100.add8InputFlag = TRUE; // Input
+				state.add8InputFlag = TRUE; // Input
 			}
 		}
 		
 		// If this PHROM's bank is active, write data
-		if (tms6100.bankActiveFlag == TRUE) {
+		if (state.bankActiveFlag == TRUE) {
 			// Place the bit of data onto the ADD8 pin
 			uint8_t dataBit = 0;
-			if ((tms6100.currentByte & (1 << tms6100.currentBit)) == 0) dataBit = 0; else dataBit = 1;
+			if ((state.currentByte & (1 << state.currentBit)) == 0) dataBit = 0; else dataBit = 1;
 			if (dataBit == 0) TMS6100_ADD8_PORT &= ~TMS6100_ADD8; else TMS6100_ADD8_PORT |= TMS6100_ADD8;
 		}
 		
 		// Point to the next bit
-		tms6100.currentBit++;
+		state.currentBit++;
 		
 		// End of current byte?
-		if (tms6100.currentBit > 7) {
-			tms6100.currentBit = 0;
+		if (state.currentBit > 7) {
+			state.currentBit = 0;
 			
 			// Increment the address.  Note: this action can move the address
 			// over the bank boundary.
-			tms6100.address++;
+			state.address++;
 			
 			// Get the next byte to transmit
 			
 			// Is the current address within this PROM's bank?
-			currentBank = (tms6100.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
-			localAddress = (tms6100.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
+			currentBank = (state.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+			localAddress = (state.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
 			
 			// Only send data if the address (and bank) is valid for this PHROM
 			if (currentBank == PHROM_BANK) {
-				tms6100.currentByte = pgm_read_byte(&(phromData[localAddress]));
-				tms6100.bankActiveFlag = TRUE;
+				state.currentByte = pgm_read_byte(&(phromData[localAddress]));
+				state.bankActiveFlag = TRUE;
 				
 				// Show bank active in debug
 				DEBUG2_PORT |= DEBUG2;
 			} else {
-				tms6100.currentByte = 0xFF; // Current byte does not belong to this PHROM's bank
-				tms6100.bankActiveFlag = FALSE;
+				state.currentByte = 0xFF; // Current byte does not belong to this PHROM's bank
+				state.bankActiveFlag = FALSE;
 				
 				// Show bank inactive in debug
 				DEBUG2_PORT &= ~DEBUG2;
@@ -210,10 +227,11 @@ void m0SignalHandler(void) // ISR(TMS6100_M0_INT_VECT)
 		// is a dummy read.
 			
 		// Check for a 'dummy' read (indicating reset requested)
-		if (tms6100.validAddressLoadedFlag == FALSE) {
+		if (state.validAddressLoadedFlag == FALSE) {
 			// There is no valid loaded address... Reset the TMS6100 to a known state
-			tms6100.address = 0;
-			tms6100.loadAddressNibble = 0;
+			state.address = 0;
+			state.loadAddressNibble = 0;
+			state.currentBit = 0;
 		} else {
 			// We have a valid address so this is a 'real' READ DATA command
 				
@@ -224,7 +242,7 @@ void m0SignalHandler(void) // ISR(TMS6100_M0_INT_VECT)
 			// data transfer
 
 			// Set read data active
-			tms6100.readDataActive = TRUE;
+			state.readDataActive = TRUE;
 			
 			// Show read data active in debug
 			DEBUG1_PORT |= DEBUG1;
@@ -232,21 +250,21 @@ void m0SignalHandler(void) // ISR(TMS6100_M0_INT_VECT)
 			// Get the first byte of data to transmit
 				
 			// Is the current address within this PROM's bank?
-			currentBank = (tms6100.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
-			localAddress = (tms6100.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
+			currentBank = (state.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+			localAddress = (state.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
 				
 			// Only send data if the address (and bank) is valid for this PHROM
 			if (currentBank == PHROM_BANK) {
-				tms6100.currentByte = pgm_read_byte(&(phromData[localAddress]));
-				tms6100.currentBit = 0;
-				tms6100.bankActiveFlag = TRUE;
+				state.currentByte = pgm_read_byte(&(phromData[localAddress]));
+				state.currentBit = 0;
+				state.bankActiveFlag = TRUE;
 				
 				// Show bank active in debug
 				DEBUG2_PORT |= DEBUG2;
 			} else {
-				tms6100.currentByte = 0xFF; // Current byte does not belong to this PHROM's bank
-				tms6100.currentBit = 0;
-				tms6100.bankActiveFlag = FALSE;
+				state.currentByte = 0xFF; // Current byte does not belong to this PHROM's bank
+				state.currentBit = 0;
+				state.bankActiveFlag = FALSE;
 				
 				// Show bank inactive in debug
 				DEBUG2_PORT &= ~DEBUG2;
@@ -255,6 +273,24 @@ void m0SignalHandler(void) // ISR(TMS6100_M0_INT_VECT)
 			// Whilst read data is active, we need to interrupt on the leading edge of M0
 			// Set external interrupt on the leading edge of a M0 pulse
 			EICRA |= (1 << TMS6100_M0_ISC1) | (1 << TMS6100_M0_ISC0);
+			
+			//// Turn off the M0 interrupt (so we only react using the SPI module
+			//// from here on)
+			//EIMSK &= ~(1 << TMS6100_M0_INT);
+			//
+			//// Turn on the SPI module (slave mode, reverse data order, interrupt on,
+			//// sample on trailing edge)
+			//SPCR |= (1 << SPE) | (1 << DORD) | (1 << SPIE) | (1 << CPHA);
+			//
+			//// Fill the SPI buffer with the first byte
+			//
+			//// Is the current address within this PROM's bank?
+			//currentBank = (state.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+			//localAddress = (state.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
+			//
+			//// Only send data if the address is valid for this PHROM
+			//if (currentBank == PHROM_BANK) SPDR = pgm_read_byte(&(phromData[localAddress]));
+			//else SPDR = 0xFF; // Output should be high when not in use
 		}
 	}
 }
@@ -274,8 +310,8 @@ void m1SignalHandler(void) // ISR(TMS6100_M1_INT_VECT)
 	SPCR = 0;
 	
 	// Cancel the read data command
-	tms6100.readDataActive = FALSE;
-	tms6100.bankActiveFlag = FALSE;
+	state.readDataActive = FALSE;
+	state.bankActiveFlag = FALSE;
 	
 	// Show read data inactive in debug
 	DEBUG1_PORT &= ~DEBUG1;
@@ -292,10 +328,10 @@ void m1SignalHandler(void) // ISR(TMS6100_M1_INT_VECT)
 	EIFR |= (1 << TMS6100_M0_INTF);
 	
 	// Set the ADD8 bus pin to input mode
-	if (tms6100.add8InputFlag == FALSE) {
+	if (state.add8InputFlag == FALSE) {
 		TMS6100_ADD8_DDR &= ~TMS6100_ADD8;
 		TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
-		tms6100.add8InputFlag = TRUE;
+		state.add8InputFlag = TRUE;
 	}
 	
 	// Read the nibble from the address bus
@@ -305,24 +341,24 @@ void m1SignalHandler(void) // ISR(TMS6100_M1_INT_VECT)
 	if ((TMS6100_ADD8_PIN & TMS6100_ADD8)) addressNibble += 8;
 	
 	// If this is the first nibble of a new 20-bit address, clear the address register
-	if (tms6100.loadAddressNibble == 0) tms6100.address = 0;
+	if (state.loadAddressNibble == 0) state.address = 0;
 	
 	// Store the address nibble in the correct position of the 20-bit address register
-	if (tms6100.loadAddressNibble == 0) tms6100.address |= addressNibble << 0;
-	if (tms6100.loadAddressNibble == 1) tms6100.address |= addressNibble << 4;
-	if (tms6100.loadAddressNibble == 2) tms6100.address |= addressNibble << 8;
-	if (tms6100.loadAddressNibble == 3) tms6100.address |= addressNibble << 12;
-	if (tms6100.loadAddressNibble == 4) tms6100.address |= addressNibble << 16;
+	if (state.loadAddressNibble == 0) state.address |= addressNibble << 0;
+	if (state.loadAddressNibble == 1) state.address |= addressNibble << 4;
+	if (state.loadAddressNibble == 2) state.address |= addressNibble << 8;
+	if (state.loadAddressNibble == 3) state.address |= addressNibble << 12;
+	if (state.loadAddressNibble == 4) state.address |= addressNibble << 16;
 	
 	// Increment the current address register nibble pointer and range check
-	tms6100.loadAddressNibble++;
+	state.loadAddressNibble++;
 	
 	// Was the received nibble the 5th and final nibble of an address?
-	if (tms6100.loadAddressNibble > 4)
+	if (state.loadAddressNibble > 4)
 	{
 		// 5th nibble of an address received - Address is now valid
-		tms6100.validAddressLoadedFlag = TRUE;
-		tms6100.loadAddressNibble = 0;
+		state.validAddressLoadedFlag = TRUE;
+		state.loadAddressNibble = 0;
 		
 		// Show valid address in debug
 		DEBUG0_PORT |= DEBUG0;
@@ -331,15 +367,15 @@ void m1SignalHandler(void) // ISR(TMS6100_M1_INT_VECT)
 		
 		// The format is - 2 bits (ignored) - 18 bits address
 		// Note: the 4 MS Bits are the bank select address
-		tms6100.bankSelectNumber = (tms6100.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+		state.bankSelectNumber = (state.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
 		
 		// The address includes the chip select bank
-		tms6100.address = (tms6100.address & 0x3FFFF); // 0b 0011 1111 1111 1111 1111 = 0x3FFFF
+		state.address = (state.address & 0x3FFFF); // 0b 0011 1111 1111 1111 1111 = 0x3FFFF
 	} else {
 		// We only have a partial address...
 		
 		// Mark the current address register as invalid
-		tms6100.validAddressLoadedFlag = FALSE;
+		state.validAddressLoadedFlag = FALSE;
 		
 		// Show invalid address in debug
 		DEBUG0_PORT &= ~DEBUG0;
