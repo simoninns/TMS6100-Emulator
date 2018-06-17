@@ -24,9 +24,6 @@
 
 ************************************************************************/
 
-// Use the internal clock
-#define F_CPU 16000000UL
-
 // Note: The TMS6100 was mask programmed for either 1-bit or 4-bit data
 // transfer.  This emulation is for use with the TMS5220 VSP which only
 // supports 1-bit mode.  Therefore 4-bit data is not emulated.
@@ -80,6 +77,9 @@ volatile struct tms6100State {
 	volatile uint8_t readDataActive;			// Flag indicating that a read data command is active
 	volatile uint8_t currentBit;				// Pointer to the current bit of data to be transmitted 
 	volatile uint8_t currentByte;				// The current byte to transmit
+	
+	volatile uint8_t add8InputFlag;				// Flag indicating that ADD8 is an input (or output if false)
+	volatile uint8_t bankActiveFlag;			// Flag indicating that this PHROM's bank is active
 } tms6100;
 
 // Initialise the AVR hardware
@@ -87,8 +87,9 @@ void initialiseHardware(void)
 {
 	// Set M0 and M1 pins to input and turn off weak pull-ups
 	TMS6100_M0_DDR &= ~TMS6100_M0;
-	TMS6100_M0_PORT &= ~TMS6100_M0;
 	TMS6100_M1_DDR &= ~TMS6100_M1;
+	
+	TMS6100_M0_PORT &= ~TMS6100_M0;
 	TMS6100_M1_PORT &= ~TMS6100_M1;
 
 	// Set the address bus to input and turn off weak pull-ups
@@ -113,8 +114,10 @@ void initialiseHardware(void)
 	tms6100.readDataActive = FALSE;
 	tms6100.currentBit = 0;
 	tms6100.currentByte = 0;
+	tms6100.add8InputFlag = TRUE;
+	tms6100.bankActiveFlag = FALSE;
 	
-	// Initialise the SPI pins
+	// Initialise the SPI pins (no longer used in this firmware)
 	// (MISO configured by ADD8)
 	TMS6100_MOSI_DDR &= ~TMS6100_MOSI; // Input
 	TMS6100_SCK_DDR &= ~TMS6100_SCK; // Input
@@ -138,11 +141,31 @@ ISR(TMS6100_M0_INT_VECT)
 	uint32_t currentBank, localAddress;
 	
 	// Are we processing a read data?
-	if (tms6100.readDataActive == TRUE) {		
-		// Place the bit of data onto the MISO pin
-		uint8_t dataBit = 0;
-		if ((tms6100.currentByte & (1 << tms6100.currentBit)) == 0) dataBit = 0; else dataBit = 1;
-		if (dataBit == 0) TMS6100_ADD8_PORT &= ~TMS6100_ADD8; else TMS6100_ADD8_PORT |= TMS6100_ADD8;
+	if (tms6100.readDataActive == TRUE) {
+		// If the current address is valid for this PHROM's bank
+		// set ADD8 as an output
+		if (tms6100.bankActiveFlag == TRUE) {
+			// This PHROM's bank is active, ensure ADD8 is an output
+			if (tms6100.add8InputFlag == TRUE) {
+				TMS6100_ADD8_DDR |= TMS6100_ADD8;
+				tms6100.add8InputFlag = FALSE; // Output
+			}
+			} else {
+			// This PHROM's bank is inactive, ensure ADD8 is an input
+			if (tms6100.add8InputFlag == FALSE) {
+				TMS6100_ADD8_DDR &= ~TMS6100_ADD8;
+				TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
+				tms6100.add8InputFlag = TRUE; // Input
+			}
+		}
+		
+		// If this PHROM's bank is active, write data
+		if (tms6100.bankActiveFlag == TRUE) {
+			// Place the bit of data onto the ADD8 pin
+			uint8_t dataBit = 0;
+			if ((tms6100.currentByte & (1 << tms6100.currentBit)) == 0) dataBit = 0; else dataBit = 1;
+			if (dataBit == 0) TMS6100_ADD8_PORT &= ~TMS6100_ADD8; else TMS6100_ADD8_PORT |= TMS6100_ADD8;
+		}
 		
 		// Point to the next bit
 		tms6100.currentBit++;
@@ -150,6 +173,9 @@ ISR(TMS6100_M0_INT_VECT)
 		// End of current byte?
 		if (tms6100.currentBit > 7) {
 			tms6100.currentBit = 0;
+			
+			// Increment the address.  Note: this action can move the address
+			// over the bank boundary.
 			tms6100.address++;
 			
 			// Get the next byte to transmit
@@ -158,9 +184,20 @@ ISR(TMS6100_M0_INT_VECT)
 			currentBank = (tms6100.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
 			localAddress = (tms6100.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
 			
-			// Only send data if the address is valid for this PHROM
-			if (currentBank == PHROM_BANK) tms6100.currentByte = pgm_read_byte(&(phromData[localAddress]));
-			else tms6100.currentByte = 0xFF; // Output should be high when not in use
+			// Only send data if the address (and bank) is valid for this PHROM
+			if (currentBank == PHROM_BANK) {
+				tms6100.currentByte = pgm_read_byte(&(phromData[localAddress]));
+				tms6100.bankActiveFlag = TRUE;
+				
+				// Show bank active in debug
+				DEBUG2_PORT |= DEBUG2;
+			} else {
+				tms6100.currentByte = 0xFF; // Current byte does not belong to this PHROM's bank
+				tms6100.bankActiveFlag = FALSE;
+				
+				// Show bank inactive in debug
+				DEBUG2_PORT &= ~DEBUG2;
+			}
 		}
 	} else {
 		// There are two possible types of READ DATA command:
@@ -177,7 +214,7 @@ ISR(TMS6100_M0_INT_VECT)
 			// There is no valid loaded address... Reset the TMS6100 to a known state
 			tms6100.address = 0;
 			tms6100.loadAddressNibble = 0;
-			} else {
+		} else {
 			// We have a valid address so this is a 'real' READ DATA command
 				
 			// This is triggered because the host sends a single M0 pulse
@@ -191,9 +228,6 @@ ISR(TMS6100_M0_INT_VECT)
 			
 			// Show read data active in debug
 			DEBUG1_PORT |= DEBUG1;
-
-			// Set the ADD8 bus pin to output mode (this doubles as SPI MISO)
-			TMS6100_ADD8_DDR |= TMS6100_ADD8;
 				
 			// Get the first byte of data to transmit
 				
@@ -201,10 +235,22 @@ ISR(TMS6100_M0_INT_VECT)
 			currentBank = (tms6100.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
 			localAddress = (tms6100.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
 				
-			// Only send data if the address is valid for this PHROM
-			if (currentBank == PHROM_BANK) tms6100.currentByte = pgm_read_byte(&(phromData[localAddress]));
-			else tms6100.currentByte = 0xFF; // Output should be high when not in use
-			tms6100.currentBit = 0;
+			// Only send data if the address (and bank) is valid for this PHROM
+			if (currentBank == PHROM_BANK) {
+				tms6100.currentByte = pgm_read_byte(&(phromData[localAddress]));
+				tms6100.currentBit = 0;
+				tms6100.bankActiveFlag = TRUE;
+				
+				// Show bank active in debug
+				DEBUG2_PORT |= DEBUG2;
+			} else {
+				tms6100.currentByte = 0xFF; // Current byte does not belong to this PHROM's bank
+				tms6100.currentBit = 0;
+				tms6100.bankActiveFlag = FALSE;
+				
+				// Show bank inactive in debug
+				DEBUG2_PORT &= ~DEBUG2;
+			}
 			
 			// Whilst read data is active, we need to interrupt on the leading edge of M0
 			// Set external interrupt on the leading edge of a M0 pulse
@@ -229,9 +275,13 @@ ISR(TMS6100_M1_INT_VECT)
 	
 	// Cancel the read data command
 	tms6100.readDataActive = FALSE;
+	tms6100.bankActiveFlag = FALSE;
 	
 	// Show read data inactive in debug
 	DEBUG1_PORT &= ~DEBUG1;
+	
+	// Show bank inactive in debug
+	DEBUG2_PORT &= ~DEBUG2;
 	
 	// Set external interrupt on the falling edge of a M0 pulse
 	EICRA |= (1 << TMS6100_M0_ISC1);
@@ -245,7 +295,11 @@ ISR(TMS6100_M1_INT_VECT)
 	EIMSK |= (1 << TMS6100_M0_INT);
 	
 	// Set the ADD8 bus pin to input mode
-	TMS6100_ADD8_DDR &= ~TMS6100_ADD8;
+	if (tms6100.add8InputFlag == FALSE) {
+		TMS6100_ADD8_DDR &= ~TMS6100_ADD8;
+		TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
+		tms6100.add8InputFlag = TRUE;
+	}
 	
 	// Read the nibble from the address bus
 	if ((TMS6100_ADD1_PIN & TMS6100_ADD1)) addressNibble += 1;
@@ -284,9 +338,7 @@ ISR(TMS6100_M1_INT_VECT)
 		
 		// The address includes the chip select bank
 		tms6100.address = (tms6100.address & 0x3FFFF); // 0b 0011 1111 1111 1111 1111 = 0x3FFFF
-	}
-	else
-	{
+	} else {
 		// We only have a partial address...
 		
 		// Mark the current address register as invalid
