@@ -136,7 +136,7 @@ void initialiseHardware(void)
 
 // Function to handle external interrupt vector for the falling edge of M0
 // Note: The falling edge of M0 indicates a READ DATA command
-ISR(TMS6100_M0_INT_VECT)
+void m0SignalHandler(void) // ISR(TMS6100_M0_INT_VECT)
 {
 	uint32_t currentBank, localAddress;
 	
@@ -261,7 +261,7 @@ ISR(TMS6100_M0_INT_VECT)
 
 // Function to handle external interrupt vector for the rising edge of M1
 // Note: The rising edge of M1 indicates a LOAD ADDRESS command
-ISR(TMS6100_M1_INT_VECT)
+void m1SignalHandler(void) // ISR(TMS6100_M1_INT_VECT)
 {
 	uint32_t addressNibble = 0;
 	
@@ -290,9 +290,6 @@ ISR(TMS6100_M1_INT_VECT)
 	// Ensure there is no pending interrupt on M0
 	// (clear the interrupt flag by writing a logical one)
 	EIFR |= (1 << TMS6100_M0_INTF);
-	
-	// Enable the M0 interrupt
-	EIMSK |= (1 << TMS6100_M0_INT);
 	
 	// Set the ADD8 bus pin to input mode
 	if (tms6100.add8InputFlag == FALSE) {
@@ -376,21 +373,33 @@ int main(void)
 	
 	// External interrupt on the rising edge of a M1 pulse
 	EICRA |= (1 << TMS6100_M1_ISC1) | (1 << TMS6100_M1_ISC0);
-
-	// Enable external interrupts for M0 and M1
-	EIMSK |= (1 << TMS6100_M0_INT) | (1 << TMS6100_M1_INT);
 	
 	// Turn SPI off
 	SPCR = 0; 
 	
-	// Enable interrupts globally
-	sei();
-	
 	// Main processing loop	
     while (1) 
     {
-		// Nothing to do here. Everything is performed
-		// using interrupts.
+		// Monitor and service the M0 and M1 signals
+		if ((EIFR & (1 << TMS6100_M1_INTF)) == (1 << TMS6100_M1_INTF)) {
+			// M1 Signal flagged
+			
+			// Clear the interrupt flag by writing a logical one
+			EIFR |= (1 << TMS6100_M1_INTF);
+			
+			// Handle the signal
+			m1SignalHandler();
+		}
+		
+		if ((EIFR & (1 << TMS6100_M0_INTF)) == (1 << TMS6100_M0_INTF)) {
+			// M0 Signal flagged
+			
+			// Clear the interrupt flag by writing a logical one
+			EIFR |= (1 << TMS6100_M0_INTF);
+			
+			// Handle the signal
+			m0SignalHandler();
+		}
 	}
 }
 
