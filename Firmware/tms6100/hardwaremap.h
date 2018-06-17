@@ -109,4 +109,24 @@
 #define TMS6100_SS_DDR		DDRB
 #define TMS6100_SS			(1 << 0)
 
+// Definitions for debug pins -------------------------------------------
+
+// Note: These pins are used for development and are not present
+// on the production version of the PCB
+
+#define DEBUG0_PORT	PORTD
+#define DEBUG0_PIN	PIND
+#define DEBUG0_DDR	DDRD
+#define DEBUG0		(1 << 5)
+
+#define DEBUG1_PORT	PORTD
+#define DEBUG1_PIN	PIND
+#define DEBUG1_DDR	DDRD
+#define DEBUG1		(1 << 6)
+
+#define DEBUG2_PORT	PORTD
+#define DEBUG2_PIN	PIND
+#define DEBUG2_DDR	DDRD
+#define DEBUG2		(1 << 7)
+
 #endif /* HARDWAREMAP_H_ */

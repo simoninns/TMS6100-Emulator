@@ -1,5 +1,5 @@
 /************************************************************************
-	romdata_acorn.h
+	romdata_us.h
 
     TI American TMS6100 PHROMA image
     Copyright (C) 2018 Simon Inns

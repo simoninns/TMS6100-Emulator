@@ -76,6 +76,10 @@ volatile struct tms6100State {
 
 	volatile uint8_t loadAddressNibble;			// The position of the address nibble we are currently waiting for (0-4)
 	volatile uint8_t validAddressLoadedFlag;	// Flag indicating if there is a valid address loaded
+	
+	volatile uint8_t readDataActive;			// Flag indicating that a read data command is active
+	volatile uint8_t currentBit;				// Pointer to the current bit of data to be transmitted 
+	volatile uint8_t currentByte;				// The current byte to transmit
 } tms6100;
 
 // Initialise the AVR hardware
@@ -106,29 +110,25 @@ void initialiseHardware(void)
 	tms6100.address = 0;
 	tms6100.loadAddressNibble = 0;
 	tms6100.validAddressLoadedFlag = FALSE;
+	tms6100.readDataActive = FALSE;
+	tms6100.currentBit = 0;
+	tms6100.currentByte = 0;
 	
 	// Initialise the SPI pins
 	// (MISO configured by ADD8)
 	TMS6100_MOSI_DDR &= ~TMS6100_MOSI; // Input
 	TMS6100_SCK_DDR &= ~TMS6100_SCK; // Input
 	TMS6100_SS_DDR &= ~TMS6100_SS; // Input
-}
-
-// SPI buffer interrupt - called when the SPI buffer is empty
-ISR(SPI_STC_vect)
-{
-	uint32_t currentBank, localAddress;
 	
-	// Point to the next address in sequence
-	tms6100.address++;
+	// Initialise the debug pins as outputs
+	// and set to off
+	DEBUG0_DDR |= DEBUG0;
+	DEBUG1_DDR |= DEBUG1;
+	DEBUG2_DDR |= DEBUG2;
 	
-	// Is the current address within this PROM's bank?
-	currentBank = (tms6100.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
-	localAddress = (tms6100.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
-	
-	// Only send data if the address is valid for this PHROM
-	if (currentBank == PHROM_BANK) SPDR = pgm_read_byte(&(phromData[localAddress]));
-	else SPDR = 0xFF; // Output should be high when not in use
+	DEBUG0_PORT &= ~DEBUG0;
+	DEBUG1_PORT &= ~DEBUG1;
+	DEBUG2_PORT &= ~DEBUG2;
 }
 
 // Function to handle external interrupt vector for the falling edge of M0
@@ -137,49 +137,79 @@ ISR(TMS6100_M0_INT_VECT)
 {
 	uint32_t currentBank, localAddress;
 	
-	// There are two possible types of READ DATA command:
-	// A 'dummy' read which indicates the TMS6100 should reset
-	// and a real read which indicates the TMS6100 should transfer a bit of data
-	
-	// The reset can be detected because the TMS6100 requires 5 calls to the
-	// LOAD ADDRESS command before a loaded address is considered 'valid',
-	// so if we get a read, and there is not yet a valid address, the command
-	// is a dummy read.
-	
-	// Check for a 'dummy' read (indicating reset requested)
-	if (tms6100.validAddressLoadedFlag == FALSE) {
-		// There is no valid loaded address... Reset the TMS6100 to a known state
-		tms6100.address = 0;
-		tms6100.loadAddressNibble = 0;
+	// Are we processing a read data?
+	if (tms6100.readDataActive == TRUE) {		
+		// Place the bit of data onto the MISO pin
+		uint8_t dataBit = 0;
+		if ((tms6100.currentByte & (1 << tms6100.currentBit)) == 0) dataBit = 0; else dataBit = 1;
+		if (dataBit == 0) TMS6100_ADD8_PORT &= ~TMS6100_ADD8; else TMS6100_ADD8_PORT |= TMS6100_ADD8;
+		
+		// Point to the next bit
+		tms6100.currentBit++;
+		
+		// End of current byte?
+		if (tms6100.currentBit > 7) {
+			tms6100.currentBit = 0;
+			tms6100.address++;
+			
+			// Get the next byte to transmit
+			
+			// Is the current address within this PROM's bank?
+			currentBank = (tms6100.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+			localAddress = (tms6100.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
+			
+			// Only send data if the address is valid for this PHROM
+			if (currentBank == PHROM_BANK) tms6100.currentByte = pgm_read_byte(&(phromData[localAddress]));
+			else tms6100.currentByte = 0xFF; // Output should be high when not in use
+		}
 	} else {
-		// We have a valid address so this is a 'real' READ DATA command
-		
-		// This is triggered because the host sends a single M0 pulse
-		// to initiate the DATA READ command (and this pulse is *not*
-		// for data transfer) - so we can detect this pulse and use it
-		// to turn on the SPI module for the actual (much higher speed)
-		// data transfer
+		// There are two possible types of READ DATA command:
+		// A 'dummy' read which indicates the TMS6100 should reset
+		// and a real read which indicates the TMS6100 should transfer a bit of data
+			
+		// The reset can be detected because the TMS6100 requires 5 calls to the
+		// LOAD ADDRESS command before a loaded address is considered 'valid',
+		// so if we get a read, and there is not yet a valid address, the command
+		// is a dummy read.
+			
+		// Check for a 'dummy' read (indicating reset requested)
+		if (tms6100.validAddressLoadedFlag == FALSE) {
+			// There is no valid loaded address... Reset the TMS6100 to a known state
+			tms6100.address = 0;
+			tms6100.loadAddressNibble = 0;
+			} else {
+			// We have a valid address so this is a 'real' READ DATA command
+				
+			// This is triggered because the host sends a single M0 pulse
+			// to initiate the DATA READ command (and this pulse is *not*
+			// for data transfer) - so we can detect this pulse and use it
+			// to turn on the SPI module for the actual (much higher speed)
+			// data transfer
 
-		// Set the ADD8 bus pin to output mode (this doubles as SPI MISO)
-		TMS6100_ADD8_DDR |= TMS6100_ADD8;
+			// Set read data active
+			tms6100.readDataActive = TRUE;
 			
-		// Turn off the M0 interrupt (so we only react using the SPI module
-		// from here on)
-		EIMSK &= ~(1 << TMS6100_M0_INT);
+			// Show read data active in debug
+			DEBUG1_PORT |= DEBUG1;
+
+			// Set the ADD8 bus pin to output mode (this doubles as SPI MISO)
+			TMS6100_ADD8_DDR |= TMS6100_ADD8;
+				
+			// Get the first byte of data to transmit
+				
+			// Is the current address within this PROM's bank?
+			currentBank = (tms6100.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+			localAddress = (tms6100.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
+				
+			// Only send data if the address is valid for this PHROM
+			if (currentBank == PHROM_BANK) tms6100.currentByte = pgm_read_byte(&(phromData[localAddress]));
+			else tms6100.currentByte = 0xFF; // Output should be high when not in use
+			tms6100.currentBit = 0;
 			
-		// Turn on the SPI module (slave mode, reverse data order, interrupt on,
-		// sample on trailing edge)
-		SPCR |= (1 << SPE) | (1 << DORD) | (1 << SPIE) | (1 << CPHA);
-			
-		// Fill the SPI buffer with the first byte
-		
-		// Is the current address within this PROM's bank?
-		currentBank = (tms6100.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
-		localAddress = (tms6100.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
-		
-		// Only send data if the address is valid for this PHROM
-		if (currentBank == PHROM_BANK) SPDR = pgm_read_byte(&(phromData[localAddress]));
-		else SPDR = 0xFF; // Output should be high when not in use
+			// Whilst read data is active, we need to interrupt on the leading edge of M0
+			// Set external interrupt on the leading edge of a M0 pulse
+			EICRA |= (1 << TMS6100_M0_ISC1) | (1 << TMS6100_M0_ISC0);
+		}
 	}
 }
 
@@ -196,6 +226,16 @@ ISR(TMS6100_M1_INT_VECT)
 	
 	// Turn the SPI off
 	SPCR = 0;
+	
+	// Cancel the read data command
+	tms6100.readDataActive = FALSE;
+	
+	// Show read data inactive in debug
+	DEBUG1_PORT &= ~DEBUG1;
+	
+	// Set external interrupt on the falling edge of a M0 pulse
+	EICRA |= (1 << TMS6100_M0_ISC1);
+	EICRA &= ~(1 << TMS6100_M0_ISC0);
 	
 	// Ensure there is no pending interrupt on M0
 	// (clear the interrupt flag by writing a logical one)
@@ -233,6 +273,9 @@ ISR(TMS6100_M1_INT_VECT)
 		tms6100.validAddressLoadedFlag = TRUE;
 		tms6100.loadAddressNibble = 0;
 		
+		// Show valid address in debug
+		DEBUG0_PORT |= DEBUG0;
+		
 		// We get 20 bits of address data from the host in 5 nibbles...
 		
 		// The format is - 2 bits (ignored) - 18 bits address
@@ -248,6 +291,9 @@ ISR(TMS6100_M1_INT_VECT)
 		
 		// Mark the current address register as invalid
 		tms6100.validAddressLoadedFlag = FALSE;
+		
+		// Show invalid address in debug
+		DEBUG0_PORT &= ~DEBUG0;
 	}
 }
 
@@ -283,7 +329,7 @@ int main(void)
 	EIMSK |= (1 << TMS6100_M0_INT) | (1 << TMS6100_M1_INT);
 	
 	// Turn SPI off
-	SPCR = 0; // Probably not required?
+	SPCR = 0; 
 	
 	// Enable interrupts globally
 	sei();
