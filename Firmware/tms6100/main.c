@@ -149,6 +149,8 @@ ISR(SPI_STC_vect)
 	// Only send data if the address is valid for this PHROM
 	if (currentBank == PHROM_BANK) SPDR = pgm_read_byte(&(phromData[localAddress]));
 	else SPDR = 0xFF; // Output should be high when not in use
+	
+	
 }
 
 // Function to handle external interrupt vector for the falling edge of M0
@@ -159,63 +161,63 @@ void m0SignalHandler(void) // ISR(TMS6100_M0_INT_VECT)
 	
 	// Are we processing a read data?
 	if (state.readDataActive == TRUE) {
-		// If the current address is valid for this PHROM's bank
-		// set ADD8 as an output
-		if (state.bankActiveFlag == TRUE) {
-			// This PHROM's bank is active, ensure ADD8 is an output
-			if (state.add8InputFlag == TRUE) {
-				TMS6100_ADD8_DDR |= TMS6100_ADD8;
-				state.add8InputFlag = FALSE; // Output
-			}
-			} else {
-			// This PHROM's bank is inactive, ensure ADD8 is an input
-			if (state.add8InputFlag == FALSE) {
-				TMS6100_ADD8_DDR &= ~TMS6100_ADD8;
-				TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
-				state.add8InputFlag = TRUE; // Input
-			}
-		}
-		
-		// If this PHROM's bank is active, write data
-		if (state.bankActiveFlag == TRUE) {
-			// Place the bit of data onto the ADD8 pin
-			uint8_t dataBit = 0;
-			if ((state.currentByte & (1 << state.currentBit)) == 0) dataBit = 0; else dataBit = 1;
-			if (dataBit == 0) TMS6100_ADD8_PORT &= ~TMS6100_ADD8; else TMS6100_ADD8_PORT |= TMS6100_ADD8;
-		}
-		
-		// Point to the next bit
-		state.currentBit++;
-		
-		// End of current byte?
-		if (state.currentBit > 7) {
-			state.currentBit = 0;
-			
-			// Increment the address.  Note: this action can move the address
-			// over the bank boundary.
-			state.address++;
-			
-			// Get the next byte to transmit
-			
-			// Is the current address within this PROM's bank?
-			currentBank = (state.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
-			localAddress = (state.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
-			
-			// Only send data if the address (and bank) is valid for this PHROM
-			if (currentBank == PHROM_BANK) {
-				state.currentByte = pgm_read_byte(&(phromData[localAddress]));
-				state.bankActiveFlag = TRUE;
-				
-				// Show bank active in debug
-				DEBUG2_PORT |= DEBUG2;
-			} else {
-				state.currentByte = 0xFF; // Current byte does not belong to this PHROM's bank
-				state.bankActiveFlag = FALSE;
-				
-				// Show bank inactive in debug
-				DEBUG2_PORT &= ~DEBUG2;
-			}
-		}
+		//// If the current address is valid for this PHROM's bank
+		//// set ADD8 as an output
+		//if (state.bankActiveFlag == TRUE) {
+			//// This PHROM's bank is active, ensure ADD8 is an output
+			//if (state.add8InputFlag == TRUE) {
+				//TMS6100_ADD8_DDR |= TMS6100_ADD8;
+				//state.add8InputFlag = FALSE; // Output
+			//}
+			//} else {
+			//// This PHROM's bank is inactive, ensure ADD8 is an input
+			//if (state.add8InputFlag == FALSE) {
+				//TMS6100_ADD8_DDR &= ~TMS6100_ADD8;
+				//TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
+				//state.add8InputFlag = TRUE; // Input
+			//}
+		//}
+		//
+		//// If this PHROM's bank is active, write data
+		//if (state.bankActiveFlag == TRUE) {
+			//// Place the bit of data onto the ADD8 pin
+			//uint8_t dataBit = 0;
+			//if ((state.currentByte & (1 << state.currentBit)) == 0) dataBit = 0; else dataBit = 1;
+			//if (dataBit == 0) TMS6100_ADD8_PORT &= ~TMS6100_ADD8; else TMS6100_ADD8_PORT |= TMS6100_ADD8;
+		//}
+		//
+		//// Point to the next bit
+		//state.currentBit++;
+		//
+		//// End of current byte?
+		//if (state.currentBit > 7) {
+			//state.currentBit = 0;
+			//
+			//// Increment the address.  Note: this action can move the address
+			//// over the bank boundary.
+			//state.address++;
+			//
+			//// Get the next byte to transmit
+			//
+			//// Is the current address within this PROM's bank?
+			//currentBank = (state.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+			//localAddress = (state.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
+			//
+			//// Only send data if the address (and bank) is valid for this PHROM
+			//if (currentBank == PHROM_BANK) {
+				//state.currentByte = pgm_read_byte(&(phromData[localAddress]));
+				//state.bankActiveFlag = TRUE;
+				//
+				//// Show bank active in debug
+				//DEBUG2_PORT |= DEBUG2;
+			//} else {
+				//state.currentByte = 0xFF; // Current byte does not belong to this PHROM's bank
+				//state.bankActiveFlag = FALSE;
+				//
+				//// Show bank inactive in debug
+				//DEBUG2_PORT &= ~DEBUG2;
+			//}
+		//}
 	} else {
 		// There are two possible types of READ DATA command:
 		// A 'dummy' read which indicates the TMS6100 should reset
@@ -272,25 +274,35 @@ void m0SignalHandler(void) // ISR(TMS6100_M0_INT_VECT)
 			
 			// Whilst read data is active, we need to interrupt on the leading edge of M0
 			// Set external interrupt on the leading edge of a M0 pulse
-			EICRA |= (1 << TMS6100_M0_ISC1) | (1 << TMS6100_M0_ISC0);
+			//EICRA |= (1 << TMS6100_M0_ISC1) | (1 << TMS6100_M0_ISC0);
 			
-			//// Turn off the M0 interrupt (so we only react using the SPI module
-			//// from here on)
-			//EIMSK &= ~(1 << TMS6100_M0_INT);
-			//
-			//// Turn on the SPI module (slave mode, reverse data order, interrupt on,
-			//// sample on trailing edge)
-			//SPCR |= (1 << SPE) | (1 << DORD) | (1 << SPIE) | (1 << CPHA);
-			//
-			//// Fill the SPI buffer with the first byte
-			//
-			//// Is the current address within this PROM's bank?
-			//currentBank = (state.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
-			//localAddress = (state.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
-			//
-			//// Only send data if the address is valid for this PHROM
-			//if (currentBank == PHROM_BANK) SPDR = pgm_read_byte(&(phromData[localAddress]));
-			//else SPDR = 0xFF; // Output should be high when not in use
+			// Turn off the M0 interrupt (so we only react using the SPI module
+			// from here on)
+			EIMSK &= ~(1 << TMS6100_M0_INT);
+			
+			// Ensure there is no pending interrupt on M0
+			// (clear the interrupt flag by writing a logical one)
+			EIFR |= (1 << TMS6100_M0_INTF);
+			
+			// Set ADD8 to output
+			if (state.add8InputFlag == TRUE) {
+				TMS6100_ADD8_DDR |= TMS6100_ADD8;
+				state.add8InputFlag = FALSE; // Output
+			}
+			
+			// Turn on the SPI module (slave mode, reverse data order, interrupt on,
+			// sample on trailing edge)
+			SPCR |= (1 << SPE) | (1 << DORD) | (1 << SPIE); // | (1 << CPHA) | (1 << CPOL);
+			
+			// Fill the SPI buffer with the first byte
+			
+			// Is the current address within this PROM's bank?
+			currentBank = (state.address & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+			localAddress = (state.address & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
+			
+			// Only send data if the address is valid for this PHROM
+			if (currentBank == PHROM_BANK) SPDR = pgm_read_byte(&(phromData[localAddress]));
+			else SPDR = 0xFF; // Output should be high when not in use
 		}
 	}
 }
@@ -412,6 +424,9 @@ int main(void)
 	
 	// Turn SPI off
 	SPCR = 0; 
+	
+	// Set global interrupts enabled
+	sei();
 	
 	// Main processing loop	
     while (1) 
