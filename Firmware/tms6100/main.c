@@ -149,8 +149,6 @@ ISR(SPI_STC_vect)
 	// Only send data if the address is valid for this PHROM
 	if (currentBank == PHROM_BANK) SPDR = pgm_read_byte(&(phromData[localAddress]));
 	else SPDR = 0xFF; // Output should be high when not in use
-	
-	
 }
 
 // Function to handle external interrupt vector for the falling edge of M0
@@ -260,16 +258,10 @@ void m0SignalHandler(void) // ISR(TMS6100_M0_INT_VECT)
 				state.currentByte = pgm_read_byte(&(phromData[localAddress]));
 				state.currentBit = 0;
 				state.bankActiveFlag = TRUE;
-				
-				// Show bank active in debug
-				DEBUG2_PORT |= DEBUG2;
 			} else {
 				state.currentByte = 0xFF; // Current byte does not belong to this PHROM's bank
 				state.currentBit = 0;
 				state.bankActiveFlag = FALSE;
-				
-				// Show bank inactive in debug
-				DEBUG2_PORT &= ~DEBUG2;
 			}
 			
 			// Whilst read data is active, we need to interrupt on the leading edge of M0
@@ -290,9 +282,21 @@ void m0SignalHandler(void) // ISR(TMS6100_M0_INT_VECT)
 				state.add8InputFlag = FALSE; // Output
 			}
 			
-			// Turn on the SPI module (slave mode, reverse data order, interrupt on,
-			// sample on trailing edge)
-			SPCR |= (1 << SPE) | (1 << DORD) | (1 << SPIE); // | (1 << CPHA) | (1 << CPOL);
+			// Wait for the M0 signal to clear (otherwise the SPI module will
+			// start sending on the initial 'ready' pulse of M0)
+			while((TMS6100_M0_PIN & TMS6100_M0));
+			while(!(TMS6100_M0_PIN & TMS6100_M0));
+			
+			// Configure the SPI module - slave mode, reverse data order
+			// SPI Mode 0 = Sample (Rising) / Setup (Falling)
+			// Turn on the buffer empty interrupt
+			SPCR = (1 << DORD) | (1 << SPIE);
+			
+			// Turn on SPI
+			SPCR |= (1 << SPE);
+			
+			// Show SPI active in debug
+			DEBUG2_PORT |= DEBUG2;
 			
 			// Fill the SPI buffer with the first byte
 			
@@ -328,7 +332,7 @@ void m1SignalHandler(void) // ISR(TMS6100_M1_INT_VECT)
 	// Show read data inactive in debug
 	DEBUG1_PORT &= ~DEBUG1;
 	
-	// Show bank inactive in debug
+	// Show SPI inactive in debug
 	DEBUG2_PORT &= ~DEBUG2;
 	
 	// Set external interrupt on the falling edge of a M0 pulse
