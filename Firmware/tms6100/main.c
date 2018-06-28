@@ -71,6 +71,8 @@ uint8_t m0ReadyReceived;
 uint8_t outputBuffer;
 uint8_t outputBufferPointer;
 
+uint8_t outputEnabled;
+
 // Initialise the AVR hardware
 void initialiseHardware(void)
 {
@@ -109,6 +111,7 @@ void initialiseHardware(void)
 	// Initialise the output buffer
 	outputBuffer = 0xFF;
 	outputBufferPointer = 0;
+	outputEnabled = FALSE;
 	
 	// Initialise the SPI pins (no longer used in this firmware)
 	// (MISO configured by ADD8)
@@ -138,29 +141,42 @@ void m0SignalHandler(void) //ISR(TMS6100_M0_INT_VECT)
 		// This is the first M0 pulse after a M1 pulse (the 'ready' pulse)
 		m0ReadyReceived = TRUE;
 		
-		// Load the byte to be transmitted
-		//uint32_t currentBank = (currentAddress & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+		// Get the current bank and local address
+		uint32_t currentBank = (currentAddress & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
 		uint32_t localAddress = (currentAddress & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
-		outputBuffer = pgm_read_byte(&(phromData[localAddress]));
+		
+		// Load the byte to be transmitted (if this is our bank)
+		if (currentBank == PHROM_BANK) {
+			// Load the output buffer
+			outputBuffer = pgm_read_byte(&(phromData[localAddress]));
+			
+			// Set the ADD8 bus pin to output mode and set the pin high
+			// (as this is what the original TMS6100 does)
+			TMS6100_ADD8_DDR |= TMS6100_ADD8;
+			TMS6100_ADD8_PORT |= TMS6100_ADD8;
+			outputEnabled = TRUE;
+		} else outputBuffer = 0x00;
 		
 		// Reset the buffer pointer
-		outputBufferPointer = 0; // LSB to MSB
-		
-		// Set the ADD8 bus pin to output mode and set the pin high
-		// (as this is what the original TMS6100 does)
-		TMS6100_ADD8_DDR |= TMS6100_ADD8;
-		TMS6100_ADD8_PORT |= TMS6100_ADD8;
+		outputBufferPointer = 0;
 		
 		// Show M0 handler inactive in debug
 		DEBUG0_PORT &= ~DEBUG0;
 	} else {
 		// Show M0 handler active in debug
 		DEBUG1_PORT |= DEBUG1;
+		
 		// This is a data read M0 pulse
 		
-		// Set the data on the output pin (so it is valid when the falling edge of M0 occurs)
-		if (outputBuffer & (1 << outputBufferPointer)) TMS6100_ADD8_PORT |= TMS6100_ADD8;
-		else TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
+		// Get the current bank and local address
+		uint32_t currentBank = (currentAddress & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+		
+		// Load the byte to be transmitted (if this is our bank)
+		if (currentBank == PHROM_BANK) {
+			// Set the data on the output pin (so it is valid when the falling edge of M0 occurs)
+			if (outputBuffer & (1 << outputBufferPointer)) TMS6100_ADD8_PORT |= TMS6100_ADD8;
+			else TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
+		}
 		
 		// Increment the bit pointer
 		outputBufferPointer += 1;
@@ -174,11 +190,30 @@ void m0SignalHandler(void) //ISR(TMS6100_M0_INT_VECT)
 		// Get the next byte to transmit
 		currentAddress++;
 				
-		//uint32_t currentBank = (currentAddress & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
+		// Get the current bank and local address
+		uint32_t currentBank = (currentAddress & 0x3C000) >> 14; // 0b 0011 1100 0000 0000 0000 = 0x03C000
 		uint32_t localAddress = (currentAddress & 0x3FFF); // 0b 0000 0011 1111 1111 1111 = 0x03FFF
-				
-		outputBuffer = pgm_read_byte(&(phromData[localAddress]));
-		outputBufferPointer = 0;
+		
+		// Load the byte to be transmitted (if this is our bank)
+		if (currentBank == PHROM_BANK) {
+			// Load the output buffer
+			outputBuffer = pgm_read_byte(&(phromData[localAddress]));
+			
+			// Reset the buffer pointer
+			outputBufferPointer = 0;
+			
+			// If the output is disabled, enable it now
+			// Note: this is for the edge case where a sequence of reads
+			// cross a PHROM bank boundary
+			if (outputEnabled == FALSE) {
+				TMS6100_ADD8_DDR |= TMS6100_ADD8;
+				TMS6100_ADD8_PORT |= TMS6100_ADD8;
+				outputEnabled = TRUE;
+			}
+		} else {
+			outputBuffer = 0x00;
+			outputBufferPointer = 0;
+		}
 	}
 }
 
@@ -193,6 +228,8 @@ void m1SignalHandler(void)
 	
 	// Set the ADD8 bus pin to input mode
 	TMS6100_ADD8_DDR &= ~TMS6100_ADD8;
+	TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
+	outputEnabled = FALSE;
 	
 	// Read the nibble from the address bus
 	if ((TMS6100_ADD1_PIN & TMS6100_ADD1)) addressNibble += 1;
