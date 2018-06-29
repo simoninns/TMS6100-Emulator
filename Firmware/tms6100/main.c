@@ -104,7 +104,7 @@ void initialiseHardware(void)
 	currentAddress = 0x00;
 	
 	// Initial M0 signal received flag
-	// Note: this indicates if we've recieved the first M0 'ready' signal
+	// Note: this indicates if we've received the first M0 'ready' signal
 	// following an M1 signal
 	m0ReadyReceived = FALSE;
 	
@@ -115,9 +115,13 @@ void initialiseHardware(void)
 	
 	// Initialise the SPI pins (no longer used in this firmware)
 	// (MISO configured by ADD8)
-	TMS6100_MOSI_DDR &= ~TMS6100_MOSI; // Input
-	TMS6100_SCK_DDR &= ~TMS6100_SCK; // Input
-	TMS6100_SS_DDR &= ~TMS6100_SS; // Input
+	TMS6100_MOSI_DDR &= ~TMS6100_MOSI;
+	TMS6100_SCK_DDR  &= ~TMS6100_SCK;
+	TMS6100_SS_DDR   &= ~TMS6100_SS;
+	
+	TMS6100_MOSI_PORT &= ~TMS6100_MOSI;
+	TMS6100_SCK_PORT  &= ~TMS6100_SCK;
+	TMS6100_SS_PORT   &= ~TMS6100_SS;
 	
 	// Initialise the debug pins as outputs
 	// and set to off
@@ -152,10 +156,22 @@ void m0SignalHandler(void) //ISR(TMS6100_M0_INT_VECT)
 			
 			// Set the ADD8 bus pin to output mode and set the pin high
 			// (as this is what the original TMS6100 does)
-			TMS6100_ADD8_DDR |= TMS6100_ADD8;
-			TMS6100_ADD8_PORT |= TMS6100_ADD8;
-			outputEnabled = TRUE;
-		} else outputBuffer = 0x00;
+			if (outputEnabled == FALSE) {
+				TMS6100_ADD8_DDR |= TMS6100_ADD8;
+				TMS6100_ADD8_PORT |= TMS6100_ADD8;
+				outputEnabled = TRUE;
+			}
+		} else {
+			outputBuffer = 0x00;
+			outputBufferPointer = 0;
+			
+			// Set the ADD8 bus pin to input mode
+			if (outputEnabled == TRUE) {
+				TMS6100_ADD8_DDR &= ~TMS6100_ADD8;
+				TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
+				outputEnabled = FALSE;
+			}
+		}
 		
 		// Reset the buffer pointer
 		outputBufferPointer = 0;
@@ -213,6 +229,13 @@ void m0SignalHandler(void) //ISR(TMS6100_M0_INT_VECT)
 		} else {
 			outputBuffer = 0x00;
 			outputBufferPointer = 0;
+			
+			// Set the ADD8 bus pin to input mode
+			if (outputEnabled == TRUE) {
+				TMS6100_ADD8_DDR &= ~TMS6100_ADD8;
+				TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
+				outputEnabled = FALSE;
+			}
 		}
 	}
 }
@@ -227,9 +250,11 @@ void m1SignalHandler(void)
 	DEBUG2_PORT |= DEBUG2;
 	
 	// Set the ADD8 bus pin to input mode
-	TMS6100_ADD8_DDR &= ~TMS6100_ADD8;
-	TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
-	outputEnabled = FALSE;
+	if (outputEnabled == TRUE) {
+		TMS6100_ADD8_DDR &= ~TMS6100_ADD8;
+		TMS6100_ADD8_PORT &= ~TMS6100_ADD8;
+		outputEnabled = FALSE;
+	}
 	
 	// Read the nibble from the address bus
 	if ((TMS6100_ADD1_PIN & TMS6100_ADD1)) addressNibble += 1;
